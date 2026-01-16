@@ -84,15 +84,19 @@ def create_user(user: UserCreate):
     return add_user_links(created_user)
 
 
+@app.get("/users/me", response_model=UserResponse)
+def get_me(current_user: dict = Depends(get_current_user)):
+    user = serialize_id(current_user)
+    return add_user_links(user)
+
+
 @app.get("/users/{user_id}", response_model=UserResponse)
-def get_user(user_id: str):
+def get_user(user_id: str, current_user: dict = Depends(get_current_user)):
     user = users_collection.find_one({"_id": ObjectId(user_id)})
     if not user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
-        )
-    user = serialize_id(user)
-    return add_user_links(user)
+        raise HTTPException(status_code=404, detail="User not found")
+
+    return add_user_links(serialize_id(user))
 
 
 @app.put("/users/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -114,31 +118,23 @@ def update_user(
 
 
 @app.post("/games", response_model=GameResponse, status_code=status.HTTP_201_CREATED)
-def create_game(game: GameCreate, owner_id: str = Query(...)):
-    owner = users_collection.find_one({"_id": ObjectId(owner_id)})
-    if not owner:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Owner not found"
-        )
-
+def create_game(game: GameCreate, current_user: dict = Depends(get_current_user)):
     game_dict = game.model_dump()
-    game_dict["owner_id"] = owner_id
+    game_dict["owner_id"] = str(current_user["_id"])
 
     result = games_collection.insert_one(game_dict)
     created_game = games_collection.find_one({"_id": result.inserted_id})
-    created_game = serialize_id(created_game)
-    return add_game_links(created_game)
+
+    return add_game_links(serialize_id(created_game))
 
 
 @app.get("/games/{game_id}", response_model=GameResponse)
-def get_game(game_id: str):
+def get_game(game_id: str, current_user: dict = Depends(get_current_user)):
     game = games_collection.find_one({"_id": ObjectId(game_id)})
     if not game:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Game not found"
-        )
-    game = serialize_id(game)
-    return add_game_links(game)
+        raise HTTPException(status_code=404, detail="Game not found")
+
+    return add_game_links(serialize_id(game))
 
 
 @app.put("/games/{game_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -162,12 +158,13 @@ def update_game(
 
 
 @app.delete("/games/{game_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_game(game_id: str):
+def delete_game(game_id: str, current_user: dict = Depends(get_current_user)):
     game = games_collection.find_one({"_id": ObjectId(game_id)})
     if not game:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Game not found"
-        )
+        raise HTTPException(status_code=404, detail="Game not found")
+
+    if game["owner_id"] != str(current_user["_id"]):
+        raise HTTPException(status_code=403, detail="You do not own this game")
 
     games_collection.delete_one({"_id": ObjectId(game_id)})
 
