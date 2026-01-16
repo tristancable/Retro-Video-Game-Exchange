@@ -1,9 +1,16 @@
+import os
 from pymongo.mongo_client import MongoClient
 from pymongo.server_api import ServerApi
+from dotenv import load_dotenv
 
-uri = "mongodb+srv://dev:dev@cluster0.ftmds5c.mongodb.net/?appName=Cluster0"
+load_dotenv()
 
-client = MongoClient(uri, server_api=ServerApi('1'))
+MONGO_URI = os.getenv("MONGODB_URI")
+
+if not MONGO_URI:
+    raise ValueError("MONGODB_URI environment variable is not set")
+
+client = MongoClient(MONGO_URI, server_api=ServerApi("1"))
 db = client["RetroVideoGameExchange"]
 
 games_collection = db["Games"]
