@@ -7,8 +7,10 @@ from models import (
     GameCreate,
     GameResponse,
     GameUpdate,
+    TradeOfferCreate,
+    TradeOfferResponse,
 )
-from db import games_collection, users_collection
+from db import games_collection, users_collection, trade_offers_collection
 from bson import ObjectId
 from passlib.context import CryptContext
 
@@ -181,6 +183,111 @@ def search_games(
 
     games = games_collection.find(query)
     return [add_game_links(serialize_id(game)) for game in games]
+
+
+@app.get("/users/me/games", response_model=list[GameResponse])
+def get_my_games(current_user: dict = Depends(get_current_user)):
+    games = games_collection.find({"owner_id": str(current_user["_id"])})
+    return [add_game_links(serialize_id(game)) for game in games]
+
+
+@app.get("/users", response_model=list[UserResponse])
+def get_all_users(current_user: dict = Depends(get_current_user)):
+    users = users_collection.find()
+    return [add_user_links(serialize_id(user)) for user in users]
+
+
+@app.post(
+    "/trades", response_model=TradeOfferResponse, status_code=status.HTTP_201_CREATED
+)
+def create_trade_offer(
+    trade: TradeOfferCreate, current_user: dict = Depends(get_current_user)
+):
+    offered_game = games_collection.find_one({"_id": ObjectId(trade.offered_game_id)})
+    requested_game = games_collection.find_one(
+        {"_id": ObjectId(trade.requested_game_id)}
+    )
+
+    if not offered_game or not requested_game:
+        raise HTTPException(status_code=404, detail="One or both games not found")
+
+    if offered_game["owner_id"] != str(current_user["_id"]):
+        raise HTTPException(status_code=403, detail="You do not own the offered game")
+
+    if requested_game["owner_id"] == str(current_user["_id"]):
+        raise HTTPException(status_code=400, detail="Cannot trade with yourself")
+
+    trade_offer = {
+        "requester_id": str(current_user["_id"]),
+        "owner_id": requested_game["owner_id"],
+        "offered_game_id": trade.offered_game_id,
+        "requested_game_id": trade.requested_game_id,
+        "status": "pending",
+    }
+
+    result = trade_offers_collection.insert_one(trade_offer)
+    trade_offer["_id"] = result.inserted_id
+
+    return serialize_id(trade_offer)
+
+
+@app.get("/trades/incoming", response_model=list[TradeOfferResponse])
+def get_incoming_trades(current_user: dict = Depends(get_current_user)):
+    trades = trade_offers_collection.find(
+        {"owner_id": str(current_user["_id"]), "status": "pending"}
+    )
+    return [serialize_id(trade) for trade in trades]
+
+
+@app.get("/trades/outgoing", response_model=list[TradeOfferResponse])
+def get_outgoing_trades(current_user: dict = Depends(get_current_user)):
+    trades = trade_offers_collection.find({"requester_id": str(current_user["_id"])})
+    return [serialize_id(trade) for trade in trades]
+
+
+@app.post("/trades/{trade_id}/accept", status_code=status.HTTP_204_NO_CONTENT)
+def accept_trade_offer(trade_id: str, current_user: dict = Depends(get_current_user)):
+    trade = trade_offers_collection.find_one({"_id": ObjectId(trade_id)})
+
+    if not trade:
+        raise HTTPException(status_code=404, detail="Trade offer not found")
+
+    if trade["owner_id"] != str(current_user["_id"]):
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    if trade["status"] != "pending":
+        raise HTTPException(status_code=400, detail="Trade offer is not pending")
+
+    games_collection.update_one(
+        {"_id": ObjectId(trade["requested_game_id"])},
+        {"$set": {"owner_id": trade["requester_id"]}},
+    )
+    games_collection.update_one(
+        {"_id": ObjectId(trade["offered_game_id"])},
+        {"$set": {"owner_id": trade["owner_id"]}},
+    )
+
+    trade_offers_collection.update_one(
+        {"_id": ObjectId(trade_id)}, {"$set": {"status": "accepted"}}
+    )
+
+
+@app.post("/trades/{trade_id}/reject", status_code=status.HTTP_204_NO_CONTENT)
+def reject_trade_offer(trade_id: str, current_user: dict = Depends(get_current_user)):
+    trade = trade_offers_collection.find_one({"_id": ObjectId(trade_id)})
+
+    if not trade:
+        raise HTTPException(status_code=404, detail="Trade offer not found")
+
+    if trade["owner_id"] != str(current_user["_id"]):
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    if trade["status"] != "pending":
+        raise HTTPException(status_code=400, detail="Trade offer is not pending")
+
+    trade_offers_collection.update_one(
+        {"_id": ObjectId(trade_id)}, {"$set": {"status": "rejected"}}
+    )
 
 
 # I used AI to help write this code

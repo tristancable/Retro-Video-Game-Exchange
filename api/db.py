@@ -15,3 +15,4 @@ db = client["RetroVideoGameExchange"]
 
 games_collection = db["Games"]
 users_collection = db["Users"]
+trade_offers_collection = db["TradeOffers"]

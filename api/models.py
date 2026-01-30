@@ -48,3 +48,15 @@ class GameResponse(BaseModel):
     condition: str
     previous_owners: Optional[int]
     owner_id: str
+
+class TradeOfferCreate(BaseModel):
+    offered_game_id: str
+    requested_game_id: str
+    
+class TradeOfferResponse(BaseModel):
+    id: str
+    requester_id: str
+    owner_id: str
+    offered_game_id: str
+    requested_game_id: str
+    status: str # pending | accepted | rejected
