@@ -5,8 +5,26 @@ services:
       dockerfile: Dockerfile
     env_file:
       - ./api/.env
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
     volumes:
       - ./api:/app
+    networks:
+      - distributed_system
+    deploy:
+      replicas: 3
+
+  email-service:
+    build:
+      context: ./email-service
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      EMAIL_HOST: smtp.ethereal.email
+      EMAIL_PORT: 587
+      EMAIL_USER: eusebio.howe@ethereal.email
+      EMAIL_PASSWORD: TnebDnAPH8caspNUQE
+    depends_on:
+      - kafka
     networks:
       - distributed_system
 
@@ -22,6 +40,28 @@ services:
     networks:
       - distributed_system
 
+  zookeeper:
+    image: wurstmeister/zookeeper:latest
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    networks:
+      - distributed_system
+
+  kafka:
+    image: wurstmeister/kafka:latest
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+    ports:
+      - "9092:9092"
+    depends_on:
+      - zookeeper
+    networks:
+      - distributed_system
   # db:
   #   name: mongo-db
   #   image: mysql:5.7

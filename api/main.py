@@ -13,6 +13,7 @@ from models import (
 from db import games_collection, users_collection, trade_offers_collection
 from bson import ObjectId
 from passlib.context import CryptContext
+from kafka_producer import send_email_event
 
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -117,6 +118,14 @@ def update_user(
         raise HTTPException(status_code=400, detail="No data provided for update")
 
     users_collection.update_one({"_id": ObjectId(user_id)}, {"$set": update_data})
+
+    send_email_event(
+        {
+            "event_type": "PASSWORD_CHANGED",
+            "to": [current_user["email"]],
+            "data": {"name": current_user["name"]},
+        }
+    )
 
 
 @app.post("/games", response_model=GameResponse, status_code=status.HTTP_201_CREATED)
@@ -228,6 +237,21 @@ def create_trade_offer(
     result = trade_offers_collection.insert_one(trade_offer)
     trade_offer["_id"] = result.inserted_id
 
+    requested_game_owner = users_collection.find_one(
+        {"_id": ObjectId(requested_game["owner_id"])}
+    )
+
+    send_email_event(
+        {
+            "event_type": "OFFER_CREATED",
+            "to": [current_user["email"], requested_game_owner["email"]],
+            "data": {
+                "offered_game_id": trade.offered_game_id,
+                "requested_game_id": trade.requested_game_id,
+            },
+        }
+    )
+
     return serialize_id(trade_offer)
 
 
@@ -271,6 +295,16 @@ def accept_trade_offer(trade_id: str, current_user: dict = Depends(get_current_u
         {"_id": ObjectId(trade_id)}, {"$set": {"status": "accepted"}}
     )
 
+    requester = users_collection.find_one({"_id": ObjectId(trade["requester_id"])})
+
+    send_email_event(
+        {
+            "event_type": "OFFER_ACCEPTED",
+            "to": [requester["email"], current_user["email"]],
+            "data": {"trade_id": trade_id},
+        }
+    )
+
 
 @app.post("/trades/{trade_id}/reject", status_code=status.HTTP_204_NO_CONTENT)
 def reject_trade_offer(trade_id: str, current_user: dict = Depends(get_current_user)):
@@ -287,6 +321,16 @@ def reject_trade_offer(trade_id: str, current_user: dict = Depends(get_current_u
 
     trade_offers_collection.update_one(
         {"_id": ObjectId(trade_id)}, {"$set": {"status": "rejected"}}
+    )
+
+    requester = users_collection.find_one({"_id": ObjectId(trade["requester_id"])})
+
+    send_email_event(
+        {
+            "event_type": "OFFER_REJECTED",
+            "to": [requester["email"], current_user["email"]],
+            "data": {"trade_id": trade_id},
+        }
     )
 
 
