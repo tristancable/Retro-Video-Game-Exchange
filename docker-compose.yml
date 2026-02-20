@@ -17,12 +17,10 @@ services:
   email-service:
     build:
       context: ./email-service
+    env_file:
+      - ./email-service/.env
     environment:
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
-      EMAIL_HOST: smtp.ethereal.email
-      EMAIL_PORT: 587
-      EMAIL_USER: eusebio.howe@ethereal.email
-      EMAIL_PASSWORD: TnebDnAPH8caspNUQE
     depends_on:
       - kafka
     networks:
@@ -62,6 +60,19 @@ services:
       - zookeeper
     networks:
       - distributed_system
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: retro-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+    depends_on:
+      - api
+    networks:
+      - distributed_system
+    
   # db:
   #   name: mongo-db
   #   image: mysql:5.7

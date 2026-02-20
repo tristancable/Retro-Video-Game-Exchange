@@ -1,6 +1,7 @@
 import json
 import os
 import smtplib
+import time
 from email.message import EmailMessage
 from kafka import KafkaConsumer
 
@@ -12,14 +13,24 @@ EMAIL_PASSWORD = os.getenv("EMAIL_PASSWORD")
 
 TOPIC = "email_events"
 
-consumer = KafkaConsumer(
-    TOPIC,
-    bootstrap_servers=KAFKA_SERVER,
-    value_deserializer=lambda m: json.loads(m.decode("utf-8")),
-    auto_offset_reset="earliest",
-    enable_auto_commit=True,
-    group_id="email-service",
-)
+
+def create_consumer():
+    """Retry until Kafka is available."""
+    while True:
+        try:
+            consumer = KafkaConsumer(
+                TOPIC,
+                bootstrap_servers=KAFKA_SERVER,
+                value_deserializer=lambda m: json.loads(m.decode("utf-8")),
+                auto_offset_reset="earliest",
+                enable_auto_commit=True,
+                group_id="email-service",
+            )
+            print("Connected to Kafka")
+            return consumer
+        except Exception as e:
+            print("Kafka not ready, retrying in 5 seconds...")
+            time.sleep(5)
 
 
 def send_email(to_email, subject, body):
@@ -35,17 +46,25 @@ def send_email(to_email, subject, body):
         server.send_message(msg)
 
 
-print("Email service started. Listening for events...")
+def main():
+    print("Email service starting...")
+    consumer = create_consumer()
 
-for message in consumer:
-    event = message.value
+    print("Listening for email events...")
 
-    event_type = event["event_type"]
-    recipients = event["to"]
+    for message in consumer:
+        event = message.value
 
-    subject = f"Notification: {event_type}"
-    body = json.dumps(event.get("data", {}), indent=2)
+        event_type = event["event_type"]
+        recipients = event["to"]
 
-    for email in recipients:
-        send_email(email, subject, body)
-        print(f"Email sent to {email} for event {event_type}")
+        subject = f"Notification: {event_type}"
+        body = json.dumps(event.get("data", {}), indent=2)
+
+        for email in recipients:
+            send_email(email, subject, body)
+            print(f"Email sent to {email} for event {event_type}")
+
+
+if __name__ == "__main__":
+    main()

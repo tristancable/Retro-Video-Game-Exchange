@@ -14,6 +14,7 @@ from db import games_collection, users_collection, trade_offers_collection
 from bson import ObjectId
 from passlib.context import CryptContext
 from kafka_producer import send_email_event
+from prometheus_fastapi_instrumentator import Instrumentator
 
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -37,6 +38,7 @@ def serialize_id(document):
 
 
 app = FastAPI(title="Retro Video Game Exchange API")
+Instrumentator().instrument(app).expose(app)
 
 
 def add_user_links(user):
