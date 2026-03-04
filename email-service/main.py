@@ -11,23 +11,24 @@ EMAIL_PORT = int(os.getenv("EMAIL_PORT", 587))
 EMAIL_USER = os.getenv("EMAIL_USER")
 EMAIL_PASSWORD = os.getenv("EMAIL_PASSWORD")
 
-TOPIC = "email_events"
-
 
 def create_consumer():
     """Retry until Kafka is available."""
     while True:
         try:
             consumer = KafkaConsumer(
-                TOPIC,
                 bootstrap_servers=KAFKA_SERVER,
                 value_deserializer=lambda m: json.loads(m.decode("utf-8")),
                 auto_offset_reset="earliest",
                 enable_auto_commit=True,
                 group_id="email-service",
             )
+
+            consumer.subscribe(["users", "offers"])
             print("Connected to Kafka")
+            print("Assigned partitions:", consumer.assignment())
             return consumer
+
         except Exception as e:
             print("Kafka not ready, retrying in 5 seconds...")
             time.sleep(5)

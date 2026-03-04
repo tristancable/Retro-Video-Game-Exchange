@@ -13,7 +13,7 @@ from models import (
 from db import games_collection, users_collection, trade_offers_collection
 from bson import ObjectId
 from passlib.context import CryptContext
-from kafka_producer import send_email_event
+from kafka_producer import publish_event
 from prometheus_fastapi_instrumentator import Instrumentator
 
 
@@ -121,7 +121,8 @@ def update_user(
 
     users_collection.update_one({"_id": ObjectId(user_id)}, {"$set": update_data})
 
-    send_email_event(
+    publish_event(
+        "users",
         {
             "event_type": "PASSWORD_CHANGED",
             "to": [current_user["email"]],
@@ -243,7 +244,8 @@ def create_trade_offer(
         {"_id": ObjectId(requested_game["owner_id"])}
     )
 
-    send_email_event(
+    publish_event(
+        "offers",
         {
             "event_type": "OFFER_CREATED",
             "to": [current_user["email"], requested_game_owner["email"]],
@@ -299,7 +301,8 @@ def accept_trade_offer(trade_id: str, current_user: dict = Depends(get_current_u
 
     requester = users_collection.find_one({"_id": ObjectId(trade["requester_id"])})
 
-    send_email_event(
+    publish_event(
+        "offers",
         {
             "event_type": "OFFER_ACCEPTED",
             "to": [requester["email"], current_user["email"]],
@@ -327,7 +330,8 @@ def reject_trade_offer(trade_id: str, current_user: dict = Depends(get_current_u
 
     requester = users_collection.find_one({"_id": ObjectId(trade["requester_id"])})
 
-    send_email_event(
+    publish_event(
+        "offers",
         {
             "event_type": "OFFER_REJECTED",
             "to": [requester["email"], current_user["email"]],

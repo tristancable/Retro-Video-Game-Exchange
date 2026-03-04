@@ -61,6 +61,17 @@ services:
     networks:
       - distributed_system
 
+  kafka-exporter:
+    image: danielqsj/kafka-exporter
+    command:
+      - --kafka.server=kafka:9092
+    ports:
+      - "9308:9308"
+    depends_on:
+      - kafka
+    networks:
+      - distributed_system
+
   prometheus:
     image: prom/prometheus:latest
     container_name: retro-prometheus
@@ -70,6 +81,19 @@ services:
       - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
     depends_on:
       - api
+    networks:
+      - distributed_system
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: retro-grafana
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
     networks:
       - distributed_system
     
@@ -83,3 +107,6 @@ services:
 
 networks:
   distributed_system:
+
+volumes:
+  grafana_storage:
